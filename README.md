@@ -1,1 +1,1 @@
-# MTS-Morse-code-Test-Simulator-
+# MTS (Morse code Test Simulator)
