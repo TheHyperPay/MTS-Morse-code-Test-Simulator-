@@ -42,6 +42,19 @@
 *.idb
 *.pdb
 
+# Others
+*.suo
+*.db
+*.db-shm
+*.db-wal
+*.opendb
+*.ipch
+*.recipe
+*.log
+*.tlog
+*.lastbuildstate
+*.vsidx
+
 # Kernel Module Compile Results
 *.mod*
 *.cmd
