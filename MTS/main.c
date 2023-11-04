@@ -1,12 +1,25 @@
 #pragma warning(disable:4996)
 #include <stdio.h>
+#include <stdlib.h>
 #include <Windows.h>
+#include <time.h>
 #include <ctype.h>
 #include <string.h>
 #include <malloc.h>
 
-#define SAFE_DELETE(ptr)                 do { free(ptr); (ptr) = NULL; } while(0)
-#define CAPPING(char_array)              strupr(char_array)
+#define SAFE_DELETE(ptr)                do { free(ptr); (ptr) = NULL; } while(0)
+#define CAPPING(char_array)             strupr(char_array)
+#define DELETE_SLASH_N(text_array)      text_array[strcspn(text_array, "\n")] = 0;
+
+#define WORD_MAX                        20
+typedef unsigned int                    fileLine_t;
+
+typedef struct {
+    char text[WORD_MAX];
+} wordText_t;
+#define TEXT(wordText)                  (wordText).text
+
+fileLine_t wordFile_line                = 1;
 
 typedef enum
 {
@@ -60,6 +73,60 @@ char convertM2A(const char* morseCode)
     return ' ';
 }
 
+int randomDrop(unsigned short maxVal)
+{
+    srand((unsigned int)time(NULL));
+    return (rand() % maxVal + 1);
+}
+
+
+wordText_t getFileTexts(const char* fileName, fileLine_t fileLine)
+{
+    FILE* fp = fopen(fileName, "r");
+    int counter = randomDrop(fileLine);
+    wordText_t buffer;
+    if (fp == NULL)
+    {
+        strcpy(TEXT(buffer), "ERROR");
+        return buffer;
+    }
+
+    for (int x = 1; x <= fileLine; x++)
+    {
+        fgets(TEXT(buffer), sizeof(TEXT(buffer)), fp);
+        if (counter <= x)
+        {
+            fclose(fp);
+            DELETE_SLASH_N(TEXT(buffer));
+            CAPPING(TEXT(buffer));
+            return buffer;
+        }
+    }
+
+    strcpy(TEXT(buffer), "ERROR");
+    fclose(fp);
+    return buffer;
+}
+
+fileLine_t getFileLine(const char* fileName)
+{
+    FILE* fp = fopen(fileName, "r");;
+    char buffer[20];
+    fileLine_t lines = 0;
+
+    if (fp == NULL) {
+        return 1;
+    }
+
+    while (fgets(buffer, sizeof(buffer), fp)) {
+        lines++;
+    }
+
+    fclose(fp);
+
+    return lines;
+}
+
 #define SND_FREQUENCY					440
 #define SND_GAP							165
 #define SND_SEP_CODE					26
@@ -79,6 +146,7 @@ char convertM2A(const char* morseCode)
                      Beep(659, TT2*8);Beep(587, TT2*3);Beep(554, TT2*3);Beep(493, TT2*2);Beep(440, TT2*7);Beep(440, TT2/2);Beep(415, TT2/2);Beep(440, TT2*1.5);Beep(392, TT2*1.5);Beep(349, TT2*2);Beep(392, TT2*1);Beep(349, TT2*2);\
                      Beep(329, TT2*7);Beep(415, TT2*1);Beep(440, TT2*4);Beep(329, TT2*1.5);Beep(293, TT2*1.5);Beep(277, TT2*1);Beep(293, TT2*8);Beep(293, TT2*1.5);Beep(277, TT2*1.5);Beep(493/2, TT2*3);Beep(415/2, TT2*2);Beep(440/2, TT2*8);}
 
+
 void morseSound(const char* message) {
     for (int i = 0; *(message + i) != '\0'; i++) {
         const char* morseMessage = convertA2M(*(message + i));
@@ -96,6 +164,9 @@ void morseSound(const char* message) {
         SND_END_OF_LETTER
     }
 }
+
+
+
 void runProgram1()
 {
     printf("영문을 작성하세요\n");
@@ -113,13 +184,23 @@ void runProgram1()
     return;
 }
 
+
+#define WORD_FILE_PATH                  "EnglishWords.data"
+#define WORD_FILE_LINE                  wordFile_line
+
 int main()
 {
 	int programCode = 0;
+    wordFile_line = getFileLine(WORD_FILE_PATH);
+    
+    printf("%s\n", TEXT(getFileTexts(WORD_FILE_PATH, WORD_FILE_LINE)));
+    Sleep(1200);
+    printf("%s\n", TEXT(getFileTexts(WORD_FILE_PATH, WORD_FILE_LINE)));
+    Sleep(1200);
+    printf("%s\n", TEXT(getFileTexts(WORD_FILE_PATH, WORD_FILE_LINE)));
 
 ProgramStart_Point:
-    system("cls");
-
+    /*system("cls");
 	do
 	{
 		printf("1. 모스부호로 변환\n");
@@ -133,7 +214,7 @@ ProgramStart_Point:
     case Listen:
         runProgram1();
         break;
-    }
+    }*/
 
 	goto ProgramStart_Point;
 }
