@@ -6,6 +6,9 @@
 #include <ctype.h>
 #include <string.h>
 #include <malloc.h>
+#include <mmsystem.h>
+
+#pragma comment(lib, "winmm.lib")
 
 #define SAFE_DELETE(ptr)                do { free(ptr); (ptr) = NULL; } while(0)
 #define CAPPING(char_array)             strupr(char_array)
@@ -22,7 +25,7 @@ typedef unsigned int                    fileLine_t;
 typedef struct {
     char text[WORD_MAX];
 } wordText_t;
-#define TEXT(wordText)                  (wordText).text
+#define W_TEXT(wordText)                  (wordText).text
 
 fileLine_t wordFile_line                = 1;
 
@@ -52,6 +55,7 @@ typedef enum
     No0, No1, No2, No3, No4,
     No5, No6, No7, No8, No9,
     MkPeriod, MkExclam, MkQuest, MkComma,
+    MkDash, MkUndScr, MkColon, MkSlash,
     code_Enum_Size
 }codeNum_e;
 
@@ -71,7 +75,8 @@ code_t codeList[code_Enum_Size] = {
     { 'Y', "-.--"   }, { 'Z', "--.."   }, { '0', "-----"  }, { '1', ".----"  },
     { '2', "..---"  }, { '3', "...--"  }, { '4', "....-"  }, { '5', "....."  },
     { '6', "-...."  }, { '7', "--..."  }, { '8', "---.."  }, { '9', "----."  },
-    { '.', ".-.-.-" }, { '!', "-.-.--" }, { '?', "..--.." }, { ',', "--..--" }
+    { '.', ".-.-.-" }, { '!', "-.-.--" }, { '?', "..--.." }, { ',', "--..--" },
+    { '-', "-....-" }, { '_', "..--.-" }, { ':', "---..." }, { '/', "-..-."  }
 };
 
 char* convertA2M(char alphabet)
@@ -109,6 +114,9 @@ int randomDrop(unsigned short maxVal)
 }
 
 
+#define WORD_FILE_PATH                  "EnglishWords.data"
+#define WORD_FILE_LINE                  wordFile_line
+
 wordText_t getFileTexts(const char* fileName, fileLine_t fileLine)
 {
     FILE* fp = fopen(fileName, "r");
@@ -117,23 +125,23 @@ wordText_t getFileTexts(const char* fileName, fileLine_t fileLine)
     wordText_t buffer;
     if (fp == NULL)
     {
-        strcpy(TEXT(buffer), "ERROR");
+        strcpy(W_TEXT(buffer), "ERROR");
         return buffer;
     }
 
     for (int x = 1; x <= fileLine; x++)
     {
-        fgets(TEXT(buffer), sizeof(TEXT(buffer)), fp);
+        fgets(W_TEXT(buffer), sizeof(W_TEXT(buffer)), fp);
         if (counter <= x)
         {
             fclose(fp);
-            DELETE_SLASH_N(TEXT(buffer));
-            CAPPING(TEXT(buffer));
+            DELETE_SLASH_N(W_TEXT(buffer));
+            CAPPING(W_TEXT(buffer));
             return buffer;
         }
     }
 
-    strcpy(TEXT(buffer), "ERROR");
+    strcpy(W_TEXT(buffer), "ERROR");
     fclose(fp);
     return buffer;
 }
@@ -166,6 +174,23 @@ fileLine_t getFileLine(const char* fileName)
 #define SND_END_OF_WORD					Sleep(SND_SEP_WORD);
 #define SND_VOID                        Sleep(1);
 
+volatile char keepBeeping = 0;
+volatile char threadContinue = 0;
+DWORD WINAPI BeepThread(LPVOID lpParam)
+{
+    PlaySound(TEXT("mts_beep.wav"), NULL, SND_FILENAME | SND_ASYNC | SND_LOOP);
+    while (threadContinue)
+    {
+        if (keepBeeping)
+            waveOutSetVolume(NULL, 0xFFFF | (0xFFFF << 16));
+        else
+            waveOutSetVolume(NULL, 0x0000 | (0x0000 << 16));
+    }
+    PlaySound(NULL, NULL, SND_ASYNC);
+    return 0;
+}
+
+//===================================  1번 프로그램  ===================================
 void morseSound(const char* message, punchCard_t* punchCard) {
     for (int i = 0; *(message + i) != '\0'; i++) {
         const char* morseMessage = convertA2M(*(message + i));
@@ -209,54 +234,75 @@ void runProgram1(punchCard_t* punchCard)
     return;
 }
 
-
-
-
-
-
-#define LONG_PRESS_DURATION 250 
-
-volatile char keepBeeping = 0;
-volatile char threadContinue = 0;
-DWORD WINAPI BeepThread(LPVOID lpParam) 
+//===================================  3번 프로그램  ===================================
+int checkAnsA2M(char* word, char* morse)
 {
-    while (threadContinue)
-    {
-        if (keepBeeping) 
-            Beep(SND_FREQUENCY, 150); //BUG: 소리가 끊어지면서 출력
-        else
-            Sleep(1);
+    char answer[7*20]="";
+    for (int i = 0; *(word + i) != '\0'; i++) {
+        const char* morseMessage = convertA2M(*(word + i));
+        
+        strcat(answer, morseMessage);
+        strcat(answer, " ");
     }
-    return 0;
+    printf("R: %s\n", answer);
+    return strcmp(answer, morse);
 }
-int pressChecker(int* spacePressed, DWORD* spaceDownTime, char* morse)
+
+#define ON                  1
+#define OFF                 0
+#define LONG_PRESS_DURATION 180 
+#define WAIT_TERM_DURATION  450
+
+int pressChecker(
+    char* spacePressed, 
+    char* termMode,
+    DWORD* spaceDownTime,
+    DWORD* termWaitTime, 
+    char* morse, 
+    wordText_t* word)
 {
     if (GetAsyncKeyState(KEY_SPACE) & 0x8000)
     {
-        if (!(*spacePressed))
+        if (*spacePressed == OFF)
         {
-            *spacePressed = 1;
+            *spacePressed = ON;
+            *termMode = ON;
             *spaceDownTime = GetTickCount();
-            keepBeeping = 1;
+            keepBeeping = ON;
         }
+        *termWaitTime = GetTickCount();
     }
     else if (GetAsyncKeyState(KEY_ESC) & 0x8000)
     {
         return 0;
     }
-    else if (GetAsyncKeyState(KEY_ENTER) & 0x8000)
+    else if (GetAsyncKeyState(KEY_ENTER) & 0x8000) //FIXME: N키로 대체
     {
-        printf("\nMORSE: %s\n", morse);
+        if(*termMode == OFF)
+            strcat(morse, " ");
+        *termMode = ON;
+
+        printf("\n");
+        if (checkAnsA2M(word, morse) == 0)
+            printf("정답!\n");
+        else
+            printf("오답...\n");
         morse[0] = '\0';
+
         Sleep(1000);
+
+        *word = getFileTexts(WORD_FILE_PATH, WORD_FILE_LINE);
+        printf("Q: %s\n", W_TEXT(*word));
+        printf("A: ");
     }
     else
     {
-        if (*spacePressed)
+        if (*spacePressed == ON)
         {
-            *spacePressed = 0;
-            keepBeeping = 0;
-            DWORD pressDuration = GetTickCount() - *spaceDownTime;
+            *spacePressed = OFF;
+            *termMode = OFF;
+            keepBeeping = OFF;
+            DWORD pressDuration = GetTickCount() - *spaceDownTime; //이거 매크로로
             if (pressDuration >= LONG_PRESS_DURATION)
             {
                 printf("-");
@@ -268,6 +314,17 @@ int pressChecker(int* spacePressed, DWORD* spaceDownTime, char* morse)
                 strcat(morse, ".");
             }
         }
+
+        if (*termMode == OFF)
+        {
+            DWORD termDuration = GetTickCount() - *termWaitTime;
+            if (termDuration >= WAIT_TERM_DURATION)
+            {
+                *termMode = ON;
+                printf(" ");
+                strcat(morse, " ");
+            }
+        }
     }
 
     return 1;
@@ -276,40 +333,50 @@ int pressChecker(int* spacePressed, DWORD* spaceDownTime, char* morse)
 void runProgram3(punchCard_t* punchCard)
 {
     printf("영문을 모스부호로 변환하세요\n");
-    printf("space키의 누르는 시간에 따라 - 또는 . 으로 인식합니다\n");
-    //printf("하나의 알파벳 입력이 끝나면 한 칸 띄워야 합니다\n");
+    printf("space키의 누르는 시간에 따라 - 또는 . 으로 인식합니다(-는 보통 .의 3배 간격)\n");
+    printf("일정 시간 입력을 하지 않을 시 다음 알파벳으로 넘어가집니다\n");
     printf("입력이 끝나면 enter키를 눌러 자료를 제출합니다\n");
     printf("만약 프로그램 선택창으로 돌아가고 싶다면 esc키를 누르세요\n");
 
     Sleep(1500);
 
-    threadContinue = 1;
+    threadContinue = ON;
     HANDLE hThread = CreateThread(NULL, 0, BeepThread, NULL, 0, NULL);
     if (hThread == NULL) 
     {
-        threadContinue = 0;
+        threadContinue = OFF;
         return;
     }
 
-    int spacePressed = 0;
+    char spacePressed = OFF;
+    char termMode = ON;
     DWORD spaceDownTime = 0;
+    DWORD termWaitTime = 0;
 
-    char morse[] = "";
-    while (pressChecker(&spacePressed, &spaceDownTime, morse))
+    char morse[7*20] = "";
+    wordText_t* pickupWord = { W_TEXT(getFileTexts(WORD_FILE_PATH, WORD_FILE_LINE)) };
+    printf("\nQ: %s\n", W_TEXT(*pickupWord));
+    printf("A: ");
+    while (pressChecker(
+        &spacePressed, 
+        &termMode,
+        &spaceDownTime,
+        &termWaitTime, 
+        morse, 
+        pickupWord)
+        )
     {
         Sleep(1);
     }
 
-    threadContinue = 0;
+    threadContinue = OFF;
     WaitForSingleObject(hThread, INFINITE);
     CloseHandle(hThread);
 }
 
 
-#define WORD_FILE_PATH                  "EnglishWords.data"
-#define WORD_FILE_LINE                  wordFile_line
 
-//TEXT(getFileTexts(WORD_FILE_PATH, WORD_FILE_LINE))로 파일에서 단어 끌어올 수 있다.
+
 void init();
 int main()
 {
@@ -324,7 +391,11 @@ ProgramStart_Point:
         printf("%d. 텍스트->모스부호 연습!\n", A2M);
         printf("%d. 프로그램 종료...\n", Fin);
 		printf("Insert Number>>");
-		scanf("%d", &programCode);
+        if (scanf("%d", &programCode) != 1)
+        {
+            while (getchar() != '\n');
+            goto ProgramStart_Point;
+        }
 		system("cls");
 	} while (!(0 < programCode && programCode < program_Enum_Size));
 
@@ -341,6 +412,7 @@ ProgramStart_Point:
         break;
     }
 
+    programCode = 0;
 	goto ProgramStart_Point;
 }
 
