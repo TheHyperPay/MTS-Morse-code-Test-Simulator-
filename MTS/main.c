@@ -1,4 +1,5 @@
 #pragma warning(disable:4996)
+#pragma warning(disable:28159)
 #include <stdio.h>
 #include <stdlib.h>
 #include <Windows.h>
@@ -16,29 +17,54 @@
 
 #define KEY_SPACE                       0x20
 #define KEY_ESC                         0x1B
-#define KEY_ENTER                       0x0D
+#define KEY_N                           0x4E
 
 #define WORD_MAX                        20
 
 typedef unsigned int                    fileLine_t;
 
+#define ALLOW       1
+#define DENY        0
+#define CHECK_CARD_HOLE_MCS(punchCard_ptr)              (punchCard_ptr)->outputToConsoleAboutMorseCodeSound ==  ALLOW
+#define CHECK_CARD_HOLE_MCB(punchCard_ptr)              (punchCard_ptr)->printToConsoleAboutMorseCodeBar ==     ALLOW
+typedef struct {
+    short outputToConsoleAboutMorseCodeSound;
+    short printToConsoleAboutMorseCodeBar;
+}punchCard_t;
+punchCard_t listenProgramCard = { DENY, DENY };
+punchCard_t m2aProgramCard = { DENY, DENY };
+
+#define INSERT_TEXT(card_p, text, str)                  {if(CHECK_CARD_HOLE_MCB(card_p)) {printf("%s", str);} strcat(text, str);}
+#define PRINT_TEXT(card_p, fstChar, secStr)             {printf("%c", fstChar); if(CHECK_CARD_HOLE_MCB(card_p)) {printf(": %s", secStr);}}
+
+#define COLOR_RED                                       FOREGROUND_RED|FOREGROUND_INTENSITY //오답 표현
+#define COLOR_GREEN                                     FOREGROUND_GREEN|FOREGROUND_INTENSITY //정답 표현
+#define COLOR_BLUE                                      FOREGROUND_BLUE|FOREGROUND_INTENSITY //추가 조건 설명(튜토리얼)
+#define COLOR_YELLOW                                    FOREGROUND_RED|FOREGROUND_GREEN|FOREGROUND_INTENSITY //프로그램 목표 강조
+#define COLOR_MAGENTA                                   FOREGROUND_RED|FOREGROUND_BLUE|FOREGROUND_INTENSITY //프로그램 이외의 설명
+#define COLOR_CYAN                                      FOREGROUND_GREEN|FOREGROUND_BLUE|FOREGROUND_INTENSITY //프로그램 기본 설명(튜토리얼)
+#define COLOR_WHITE                                     FOREGROUND_RED|FOREGROUND_GREEN|FOREGROUND_BLUE
+void printColor(const char* str, short color)
+{
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (hConsole == NULL)
+    {
+        printf("%s",str);
+    }
+    else
+    {
+        SetConsoleTextAttribute(hConsole, color);
+        printf("%s", str);
+        SetConsoleTextAttribute(hConsole, COLOR_WHITE);
+    }
+}
+        
 typedef struct {
     char text[WORD_MAX];
 } wordText_t;
 #define W_TEXT(wordText)                  (wordText).text
 
 fileLine_t wordFile_line                = 1;
-
-
-#define ALLOW       1
-#define DENY        0
-typedef struct {
-    short outputToConsoleAboutMorseCodeSound;
-    short printToConsoleAboutMorseCodeBar;
-    short inputKeyPress;
-}punchCard_t;
-punchCard_t listenProgramCard = { DENY, DENY, DENY };
-punchCard_t m2aProgramCard = { DENY, DENY, DENY };
 
 typedef enum
 {
@@ -98,14 +124,15 @@ char convertM2A(const char* morseCode)
     return ' ';
 }
 
-
+#define TIME_TERM(dword)                (GetTickCount() - (dword))
 #define TIME_NOW                        (unsigned int)time(NULL)
 #define SHUFFLE_BIT_1                   0b10101010101010101010101010101010
 #define SHUFFLE_BIT_2                   0b01010000100001000010000100001010
 
 int randomDrop(unsigned short maxVal)
 {
-    srand((SHUFFLE_BIT_1 >> 1 ^ TIME_NOW << 8) >> 10 ^
+    srand(
+        (SHUFFLE_BIT_1 >> 1 ^ TIME_NOW << 8) >> 10 ^
         (SHUFFLE_BIT_2 << 1 & TIME_NOW >> 3) >> 10 ^
         (SHUFFLE_BIT_1 << 0 ^ TIME_NOW << 15) >> 3 ^
         (SHUFFLE_BIT_2 >> 1 & TIME_NOW << 3) << 10 ^
@@ -178,32 +205,31 @@ volatile char keepBeeping = 0;
 volatile char threadContinue = 0;
 DWORD WINAPI BeepThread(LPVOID lpParam)
 {
+    punchCard_t* card = (punchCard_t*)lpParam;
     PlaySound(TEXT("mts_beep.wav"), NULL, SND_FILENAME | SND_ASYNC | SND_LOOP);
     while (threadContinue)
     {
-        if (keepBeeping)
+        if (keepBeeping && CHECK_CARD_HOLE_MCS(card))
             waveOutSetVolume(NULL, 0xFFFF | (0xFFFF << 16));
         else
             waveOutSetVolume(NULL, 0x0000 | (0x0000 << 16));
     }
     PlaySound(NULL, NULL, SND_ASYNC);
+    waveOutSetVolume(NULL, 0xFFFF | (0xFFFF << 16));
     return 0;
 }
-
+//=====================================================================================
 //===================================  1번 프로그램  ===================================
+//=====================================================================================
 void morseSound(const char* message, punchCard_t* punchCard) {
     for (int i = 0; *(message + i) != '\0'; i++) {
         const char* morseMessage = convertA2M(*(message + i));
 
-        printf("%c", *(message + i));
-        if (punchCard->printToConsoleAboutMorseCodeBar == ALLOW)
-        {
-            printf(": %s", morseMessage);
-        }
+        PRINT_TEXT(punchCard, *(message + i), morseMessage)
         printf("\n");
 
         for (int j = 0;
-            (*(morseMessage + j) != NULL) && punchCard->outputToConsoleAboutMorseCodeSound == ALLOW;
+            (*(morseMessage + j) != NULL) && CHECK_CARD_HOLE_MCS(punchCard);
             j++) 
         {
             if (*(morseMessage + j) == '-')
@@ -219,8 +245,8 @@ void morseSound(const char* message, punchCard_t* punchCard) {
 
 void runProgram1(punchCard_t* punchCard)
 {
-    printf("영문을 작성하세요\n");
-    printf("만약 프로그램 선택창으로 돌아가고 싶다면 exit를 입력하세요\n");
+    printColor("영문을 작성", COLOR_YELLOW); printf("하세요\n");
+    printf("만약 프로그램 "); printColor("선택창으로 돌아가고 싶다면 exit를 입력", COLOR_MAGENTA); printf("하세요\n");
 
     char text[] = "CQD CQD SOS SOS DE MGY POSITION 41.46N 50.14W";
     while (1)
@@ -233,8 +259,9 @@ void runProgram1(punchCard_t* punchCard)
     }
     return;
 }
-
+//=====================================================================================
 //===================================  3번 프로그램  ===================================
+//=====================================================================================
 int checkAnsA2M(char* word, char* morse)
 {
     char answer[7*20]="";
@@ -244,7 +271,7 @@ int checkAnsA2M(char* word, char* morse)
         strcat(answer, morseMessage);
         strcat(answer, " ");
     }
-    printf("R: %s\n", answer);
+    printf("R: "); printColor(answer, COLOR_YELLOW); printf("\n");
     return strcmp(answer, morse);
 }
 
@@ -253,22 +280,20 @@ int checkAnsA2M(char* word, char* morse)
 #define LONG_PRESS_DURATION 180 
 #define WAIT_TERM_DURATION  450
 
+#define P3_QUESTION(word_p)           {word_p = getFileTexts(WORD_FILE_PATH, WORD_FILE_LINE); printf("Q: "); printColor(W_TEXT(word_p), COLOR_BLUE); printf("\nA: "); }
+
 int pressChecker(
-    char* spacePressed, 
-    char* termMode,
-    DWORD* spaceDownTime,
-    DWORD* termWaitTime, 
-    char* morse, 
-    wordText_t* word)
+    char* spacePressed,     char* termMode,
+    DWORD* spaceDownTime,   DWORD* termWaitTime, 
+    char* morse,            wordText_t* word,
+    punchCard_t* punchCard)
 {
     if (GetAsyncKeyState(KEY_SPACE) & 0x8000)
     {
         if (*spacePressed == OFF)
         {
-            *spacePressed = ON;
-            *termMode = ON;
+            *spacePressed = ON; keepBeeping = ON; *termMode = ON;
             *spaceDownTime = GetTickCount();
-            keepBeeping = ON;
         }
         *termWaitTime = GetTickCount();
     }
@@ -276,7 +301,7 @@ int pressChecker(
     {
         return 0;
     }
-    else if (GetAsyncKeyState(KEY_ENTER) & 0x8000) //FIXME: N키로 대체
+    else if (GetAsyncKeyState(KEY_N) & 0x8000)
     {
         if(*termMode == OFF)
             strcat(morse, " ");
@@ -284,45 +309,31 @@ int pressChecker(
 
         printf("\n");
         if (checkAnsA2M(word, morse) == 0)
-            printf("정답!\n");
+            printColor("정답!\n", COLOR_GREEN);
         else
-            printf("오답...\n");
+            printColor("오답...\n", COLOR_RED);
         morse[0] = '\0';
-
         Sleep(1000);
 
-        *word = getFileTexts(WORD_FILE_PATH, WORD_FILE_LINE);
-        printf("Q: %s\n", W_TEXT(*word));
-        printf("A: ");
+        P3_QUESTION(*word)
     }
     else
     {
         if (*spacePressed == ON)
         {
-            *spacePressed = OFF;
-            *termMode = OFF;
-            keepBeeping = OFF;
-            DWORD pressDuration = GetTickCount() - *spaceDownTime; //이거 매크로로
-            if (pressDuration >= LONG_PRESS_DURATION)
-            {
-                printf("-");
-                strcat(morse, "-");
-            }
+            *spacePressed = OFF; *termMode = OFF; keepBeeping = OFF;
+            if (TIME_TERM(*spaceDownTime) >= LONG_PRESS_DURATION)
+                INSERT_TEXT(punchCard, morse, "-")
             else
-            {
-                printf(".");
-                strcat(morse, ".");
-            }
+                INSERT_TEXT(punchCard, morse, ".")
         }
 
         if (*termMode == OFF)
         {
-            DWORD termDuration = GetTickCount() - *termWaitTime;
-            if (termDuration >= WAIT_TERM_DURATION)
+            if (TIME_TERM(*termWaitTime) >= WAIT_TERM_DURATION)
             {
                 *termMode = ON;
-                printf(" ");
-                strcat(morse, " ");
+                INSERT_TEXT(punchCard, morse, " ")
             }
         }
     }
@@ -332,38 +343,33 @@ int pressChecker(
 
 void runProgram3(punchCard_t* punchCard)
 {
-    printf("영문을 모스부호로 변환하세요\n");
-    printf("space키의 누르는 시간에 따라 - 또는 . 으로 인식합니다(-는 보통 .의 3배 간격)\n");
-    printf("일정 시간 입력을 하지 않을 시 다음 알파벳으로 넘어가집니다\n");
-    printf("입력이 끝나면 enter키를 눌러 자료를 제출합니다\n");
-    printf("만약 프로그램 선택창으로 돌아가고 싶다면 esc키를 누르세요\n");
+    printf("영문을 "); printColor("모스부호로 변환", COLOR_YELLOW); printf("하세요\n");
+    printColor("space키의 누르는 시간", COLOR_CYAN); printf("에 따라 "); printColor("- 또는 .", COLOR_BLUE); printf(" 으로 인식합니다(-는 통상 .의 3배 간격)\n");
+    printf("일정 시간 "); printColor("입력을 하지 않을", COLOR_CYAN); printf(" 시 모스부호의 "); printColor("띄어쓰기가 진행", COLOR_BLUE); printf("됩니다\n");
+    printf("입력이 끝나면 "); printColor("N키를 눌러 자료를 제출", COLOR_CYAN); printf("합니다\n");
+    printf("만약 프로그램 "); printColor("선택창으로 돌아가고 싶다면 esc키", COLOR_MAGENTA); printf("를 누르세요\n");
 
     Sleep(1500);
 
     threadContinue = ON;
-    HANDLE hThread = CreateThread(NULL, 0, BeepThread, NULL, 0, NULL);
+    HANDLE hThread = CreateThread(NULL, 0, BeepThread, punchCard, 0, NULL);
     if (hThread == NULL) 
     {
         threadContinue = OFF;
         return;
     }
 
-    char spacePressed = OFF;
-    char termMode = ON;
-    DWORD spaceDownTime = 0;
-    DWORD termWaitTime = 0;
+    char spacePressed = OFF; char termMode = ON;
+    DWORD spaceDownTime = 0; DWORD termWaitTime = 0;
 
     char morse[7*20] = "";
-    wordText_t* pickupWord = { W_TEXT(getFileTexts(WORD_FILE_PATH, WORD_FILE_LINE)) };
-    printf("\nQ: %s\n", W_TEXT(*pickupWord));
-    printf("A: ");
+    wordText_t* pickedupWord = { W_TEXT(getFileTexts(WORD_FILE_PATH, WORD_FILE_LINE)) };
+    P3_QUESTION(*pickedupWord)
     while (pressChecker(
-        &spacePressed, 
-        &termMode,
-        &spaceDownTime,
-        &termWaitTime, 
-        morse, 
-        pickupWord)
+        &spacePressed,      &termMode,
+        &spaceDownTime,     &termWaitTime, 
+        morse,              pickedupWord,
+        punchCard)
         )
     {
         Sleep(1);
@@ -373,8 +379,6 @@ void runProgram3(punchCard_t* punchCard)
     WaitForSingleObject(hThread, INFINITE);
     CloseHandle(hThread);
 }
-
-
 
 
 void init();
@@ -425,7 +429,6 @@ void init()
 
     m2aProgramCard.outputToConsoleAboutMorseCodeSound = ALLOW;
     m2aProgramCard.printToConsoleAboutMorseCodeBar = ALLOW;
-    m2aProgramCard.inputKeyPress = ALLOW;
 }
 
 
