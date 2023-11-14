@@ -121,7 +121,7 @@ char convertM2A(const char* morseCode)
 {
     for (int x = 0; x < sizeof(codeList) / sizeof(code_t); x++)
     {
-        if (strcmp(morseCode, codeList[x].morseCode))
+        if (strcmp(morseCode, codeList[x].morseCode) == 0)
             return codeList[x].alphabet;
     }
     return ' ';
@@ -267,23 +267,11 @@ void runProgram1(punchCard_t* punchCard)
 //=====================================================================================
 //===================================  2번 프로그램  ===================================
 //=====================================================================================
-int checkAnsM2A(char* word, char* morse)
-{
-    char answer[7 * 20] = "";
-    for (int i = 0; *(morse + i) != '\0'; i++) {
-        const char* alphabet = convertM2A(*(morse + i));
 
-        strcat(answer, alphabet);
-        strcat(answer, " ");
-    }
-    printf("R: "); printColor(answer, COLOR_YELLOW); printf("\n");
-    return strcmp(word, answer);
-}
-
-void onlySound_text(const char* message, punchCard_t* punchCard)
+void onlySound_text(const char* word, punchCard_t* punchCard)
 {
-    for (int i = 0; *(message + i) != '\0'; i++) {
-        const char* morseMessage = convertA2M(*(message + i));
+    for (int i = 0; *(word + i) != '\0'; i++) {
+        const char* morseMessage = convertA2M(*(word + i));
 
         printColor(morseMessage, COLOR_BLUE); printf("  ");
 
@@ -306,7 +294,7 @@ void onlySound_text(const char* message, punchCard_t* punchCard)
 void runProgram2(punchCard_t* punchCard)
 {
     printf("모스부호 신호를 듣고 "); printColor("알맞은 알파벳으로 변환", COLOR_YELLOW); printf("하세요\n");
-    printf("만약 프로그램 "); printColor("선택창으로 돌아가고 싶다면 esc키", COLOR_MAGENTA); printf("를 누르세요\n");
+    printf("만약 프로그램 "); printColor("선택창으로 돌아가고 싶다면 exit를 입력", COLOR_MAGENTA); printf("하세요\n");
    
     char ans[7 * 20] = "";
     while (1)
@@ -314,21 +302,25 @@ void runProgram2(punchCard_t* punchCard)
         wordText_t* pickedupWord = { W_TEXT(getFileTexts(WORD_FILE_PATH, WORD_FILE_LINE)) };
         printf("Q: ");
         onlySound_text(pickedupWord, punchCard);
-
-        printf(">");
+;
+        printf("A: ");
         gets(ans);
-        if ((strcmp(CAPPING(ans), "EXIT") == 0))
-            return;
-        if (checkAnsM2A(ans, pickedupWord) == 0) {
-            printColor("정답!\n", COLOR_GREEN);
+
+        if (strcmp(CAPPING(ans), "EXIT") == 0)
+        {
+            break;
+        }
+        else if (strcmp(CAPPING(ans), pickedupWord) == 0) {
+            printf("R: "); printColor(pickedupWord, COLOR_YELLOW); printf("\n");
+            printColor("정답!\n \n", COLOR_GREEN);
         }
         else {
-            printColor("오답...\n", COLOR_RED);
+            printf("R: "); printColor(pickedupWord, COLOR_YELLOW); printf("\n");
+            printColor("오답...\n \n", COLOR_RED);
         }
-        return 1;
+
     }
     return;
-
 }
 
 //=====================================================================================
