@@ -1,4 +1,5 @@
 #pragma warning(disable:4996)
+#pragma warning(disable:6031)
 #pragma warning(disable:28159)
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,6 +26,7 @@ typedef unsigned int                    fileLine_t;
 
 #define ALLOW       1
 #define DENY        0
+#define PUNCHNUM(n) (n) > 0 ? ALLOW : DENY    
 #define CHECK_CARD_HOLE_MCS(punchCard_ptr)              (punchCard_ptr)->outputToConsoleAboutMorseCodeSound ==  ALLOW
 #define CHECK_CARD_HOLE_MCB(punchCard_ptr)              (punchCard_ptr)->printToConsoleAboutMorseCodeBar ==     ALLOW
 typedef struct {
@@ -73,6 +75,7 @@ typedef enum
     Listen = 1,
     M2A,
     A2M,
+    Setting,
     Fin,
     program_Enum_Size
 }program_e;
@@ -194,13 +197,15 @@ fileLine_t getFileLine(const char* fileName)
     return lines;
 }
 
+float timePitch                         = 1;
 #define SND_FREQUENCY					440
-#define SND_GAP							150
-#define SND_SEP_CODE					26
-#define SND_SEP_LETTER					450
-#define SND_SEP_WORD					680
-#define SND_BAR_RCV						{Beep(SND_FREQUENCY, SND_GAP * 3);	Sleep(SND_SEP_CODE / 20);}
-#define SND_DOT_RCV						{Beep(SND_FREQUENCY, SND_GAP * 1);	Sleep(SND_SEP_CODE);}
+#define SND_GAP_DOT						150 - ((timePitch-1) * 150)
+#define SND_GAP_BAR						450 - ((timePitch-1) * 450)
+#define SND_SEP_CODE					26 - ((timePitch-1) * 26)
+#define SND_SEP_LETTER					450 - ((timePitch-1) * 450)
+#define SND_SEP_WORD					680 - ((timePitch-1) * 680)
+#define SND_BAR_RCV						{Beep(SND_FREQUENCY, SND_GAP_BAR);	Sleep(SND_SEP_CODE / 20);}
+#define SND_DOT_RCV						{Beep(SND_FREQUENCY, SND_GAP_DOT);	Sleep(SND_SEP_CODE);}
 #define SND_END_OF_LETTER				Sleep(SND_SEP_LETTER);
 #define SND_END_OF_WORD					Sleep(SND_SEP_WORD);
 #define SND_VOID                        Sleep(1);
@@ -210,10 +215,14 @@ volatile char threadContinue = 0;
 DWORD WINAPI BeepThread(LPVOID lpParam)
 {
     punchCard_t* card = (punchCard_t*)lpParam;
-    PlaySound(TEXT("mts_beep.wav"), NULL, SND_FILENAME | SND_ASYNC | SND_LOOP);
+    if (CHECK_CARD_HOLE_MCS(card))
+    {
+        printf("%d",CHECK_CARD_HOLE_MCS(card));
+        PlaySound(TEXT("mts_beep.wav"), NULL, SND_FILENAME | SND_ASYNC | SND_LOOP);
+    }
     while (threadContinue)
     {
-        if (keepBeeping && CHECK_CARD_HOLE_MCS(card))
+        if (keepBeeping)
             waveOutSetVolume(NULL, 0xFFFF | (0xFFFF << 16));
         else
             waveOutSetVolume(NULL, 0x0000 | (0x0000 << 16));
@@ -336,8 +345,8 @@ int checkAnsA2M(char* word, char* morse)
 
 #define ON                  1
 #define OFF                 0
-#define LONG_PRESS_DURATION 180 
-#define WAIT_TERM_DURATION  450
+#define LONG_PRESS_DURATION 180 - ((timePitch-1) * 180)
+#define WAIT_TERM_DURATION  450 - ((timePitch-1) * 450)
 
 #define P3_QUESTION(word_p)           {word_p = getFileTexts(WORD_FILE_PATH, WORD_FILE_LINE); printf("Q: "); printColor(W_TEXT(word_p), COLOR_BLUE); printf("\nA: "); }
 
@@ -438,8 +447,91 @@ void runProgram3(punchCard_t* punchCard)
     WaitForSingleObject(hThread, INFINITE);
     CloseHandle(hThread);
 }
+//=====================================================================================
+//===================================  세팅 프로그램  ==================================
+//=====================================================================================
+typedef enum {
+    PunchCard_P1=1,
+    PunchCard_P2,
+    PunchCard_P3,
+    TimeSet,
+    Setting_Out,
+    setting_Size
+}setting_e;
+void setPunchCard(punchCard_t* card)
+{
+    int mcs = 0, mcb = 0;
+    printf("소리 출력 여부(ALLOW: 1, DENY: 0) >"); scanf("%d", &mcs);
+    printf("모스코드 출력 여부(ALLOW: 1, DENY: 0) >"); scanf("%d", &mcb);
+    card->outputToConsoleAboutMorseCodeSound = PUNCHNUM(mcs);
+    card->printToConsoleAboutMorseCodeBar = PUNCHNUM(mcb);
+    printf("설정 완료!");
+}
+void setPitch()
+{
+    printf("배속 조정 (0.5~1.5) >");
+    scanf("%f", &timePitch);
+    if (timePitch < 0.5)
+        timePitch = 0.5;
+    else if (timePitch > 1.5)
+        timePitch = 1.5;
+    printf("조정 완료!");
+}
 
+void setting()
+{
+    int inputCode = 0;
+Setting_Point:
+    system("cls");
+    do
+    {
+        printf("%d. 1번 (모스부호를 익히자!) 펀치카드 설정\n", PunchCard_P1);
+        printf("%d. 2번 (모스부호->텍스트 연습!) 펀치카드 설정\n", PunchCard_P2);
+        printf("%d. 3번 (텍스트->모스부호 연습!) 펀치카드 설정\n", PunchCard_P3);
+        printf("%d. 난이도 설정\n", TimeSet);
+        printf("%d. ", Setting_Out); printColor("세팅 나가기!!\n", COLOR_MAGENTA);
+        printf("Insert Number>>");
+        if (scanf("%d", &inputCode) != 1)
+        {
+            while (getchar() != '\n');
+            goto Setting_Point;
+        }
+        system("cls");
+    } while (!(0 < inputCode && inputCode < setting_Size));
 
+    switch (inputCode)
+    {
+        int mcs = 0, mcb = 0;
+    case PunchCard_P1:
+        printColor("1번 (모스부호를 익히자!) 펀치카드 설정중...\n", COLOR_CYAN);
+        setPunchCard(&listenProgramCard);
+        Sleep(500);
+        break;
+    case PunchCard_P2:
+        printColor("2번 (모스부호->텍스트 연습!) 펀치카드 설정중...\n", COLOR_CYAN);
+        setPunchCard(&m2aProgramCard);
+        Sleep(500);
+        break;
+    case PunchCard_P3:
+        printColor("3번 (텍스트->모스부호 연습!) 펀치카드 설정중...\n", COLOR_CYAN);
+        setPunchCard(&a2mProgramCard);
+        Sleep(500);
+        break;
+    case TimeSet:
+        setPitch();
+        Sleep(500);
+        break;
+    case Setting_Out:
+        return;
+    }
+
+    inputCode = 0;
+    goto Setting_Point;
+}
+
+//=====================================================================================
+//===================================  메인 프로그램  ==================================
+//=====================================================================================
 void init();
 int main()
 {
@@ -453,6 +545,7 @@ ProgramStart_Point:
         printf("%d. 모스부호를 익히자!\n", Listen);
         printf("%d. 모스부호->텍스트 연습!\n", M2A);
         printf("%d. 텍스트->모스부호 연습!\n", A2M);
+        printf("%d. 각종 설정!\n", Setting);
         printf("%d. 프로그램 종료...\n", Fin);
         printf("Insert Number>>");
         if (scanf("%d", &programCode) != 1)
@@ -472,7 +565,10 @@ ProgramStart_Point:
         runProgram2(&m2aProgramCard);
         break;
     case A2M:
-        runProgram3(&m2aProgramCard);
+        runProgram3(&a2mProgramCard);
+        break;
+    case Setting:
+        setting();
         break;
     case Fin:
         exit(0);
