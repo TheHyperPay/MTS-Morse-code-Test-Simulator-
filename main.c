@@ -297,14 +297,13 @@ void runProgram2(punchCard_t* punchCard)
     printf("만약 프로그램 "); printColor("선택창으로 돌아가고 싶다면 exit를 입력", COLOR_MAGENTA); printf("하세요\n");
    
     char ans[7 * 20] = "";
-    while (1)
-    {
+    while (1) {
         wordText_t* pickedupWord = { W_TEXT(getFileTexts(WORD_FILE_PATH, WORD_FILE_LINE)) };
         printf("Q: ");
         onlySound_text(pickedupWord, punchCard);
 ;
         printf("A: ");
-        gets(ans);
+        scanf("%s", ans);
 
         if (strcmp(CAPPING(ans), "EXIT") == 0)
         {
