@@ -247,19 +247,63 @@ void morseSound(const char* message, punchCard_t* punchCard) {
     }
 }
 
+int isAlreadyExistWord(const char* fileName, const char* message)
+{
+    FILE* fp = fopen(fileName, "r");;
+    char buffer[20];
+    fileLine_t lines = 0;
+
+    if (fp == NULL)
+        return 0;
+
+    while (fgets(buffer, sizeof(buffer), fp)) {
+
+        if (strcmp(message, buffer) == 0) {
+            fclose(fp);
+            return 1;
+        }
+
+    }
+    fclose(fp);
+
+    return 0;
+}
+
+void addTxtFileWord(const char* fileName, const char* message)
+{
+
+    if (isAlreadyExistWord(fileName, message)) {
+        printf("이미 텍스트 파일에 있는 단어입니다.\n");
+        return;
+    }
+
+    FILE* fp = fopen(fileName, "a");
+    if (fp == NULL)
+        return 0;
+    fprintf(fp, "\n%s ->", message);
+
+    for (int i = 0; *(message + i) != '\0'; i++) {
+        const char* morseMessage = convertA2M(*(message + i));
+        fprintf(fp, " %s  ", morseMessage);
+    }
+
+    fclose(fp);
+}
+
 void runProgram1(punchCard_t* punchCard)
 {
     printColor("영문을 작성", COLOR_YELLOW); printf("하세요\n");
     printf("만약 프로그램 "); printColor("선택창으로 돌아가고 싶다면 exit를 입력", COLOR_MAGENTA); printf("하세요\n");
-
+   
     char text[] = "CQD CQD SOS SOS DE MGY POSITION 41.46N 50.14W";
     while (1)
     {
         printf(">");
-        gets(text);
+        scanf("%s", text);
         if ((strcmp(CAPPING(text), "EXIT") == 0))
             return;
         morseSound(CAPPING(text), punchCard);
+        addTxtFileWord(WORD_FILE_PATH, text);
     }
     return;
 }
