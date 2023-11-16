@@ -251,7 +251,6 @@ int isAlreadyExistWord(const char* fileName, const char* message)
 {
     FILE* fp = fopen(fileName, "r");;
     char buffer[20];
-    fileLine_t lines = 0;
 
     if (fp == NULL)
         return 0;
@@ -262,7 +261,6 @@ int isAlreadyExistWord(const char* fileName, const char* message)
             fclose(fp);
             return 1;
         }
-
     }
     fclose(fp);
 
