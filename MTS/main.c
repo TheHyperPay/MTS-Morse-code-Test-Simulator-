@@ -134,10 +134,8 @@ const char convertM2A(const char* morseCode)
 #define TIME_NOW                        (unsigned int)time(NULL)
 #define SHUFFLE_BIT_1                   0b10101010101010101010101010101010
 #define SHUFFLE_BIT_2                   0b01010000100001000010000100001010
-
 int randomDrop(unsigned short maxVal)
 {
-
     srand(
         (SHUFFLE_BIT_1 >> 1 ^ TIME_NOW << 8) >> 10 ^
         (SHUFFLE_BIT_2 << 1 & TIME_NOW >> 3) >> 10 ^
@@ -195,6 +193,48 @@ fileLine_t getFileLine(const char* fileName)
 
     fclose(fp);
     return lines;
+}
+
+int isAlreadyExistWord(const char* fileName, const char* message)
+{
+    FILE* fp = fopen(fileName, "r");;
+    char buffer[20];
+
+    if (fp == NULL)
+        return 0;
+
+    while (fgets(buffer, sizeof(buffer), fp)) {
+
+        if (strcmp(message, buffer) == 0) {
+            fclose(fp);
+            return 1;
+        }
+
+    }
+    fclose(fp);
+
+    return 0;
+}
+
+void addTxtFileWord(const char* fileName, const char* message)
+{
+
+    if (isAlreadyExistWord(fileName, message)) {
+        printf("이미 텍스트 파일에 있는 단어입니다.\n");
+        return;
+    }
+
+    FILE* fp = fopen(fileName, "a");
+    if (fp == NULL)
+        return 0;
+    fprintf(fp, "\n%s ->", message);
+
+    for (int i = 0; *(message + i) != '\0'; i++) {
+        const char* morseMessage = convertA2M(*(message + i));
+        fprintf(fp, " %s  ", morseMessage);
+    }
+
+    fclose(fp);
 }
 
 float timePitch                         = 1;
@@ -273,6 +313,7 @@ void runProgram1(punchCard_t* punchCard)
         if ((strcmp(CAPPING(text), "EXIT") == 0))
             return;
         morseSound(CAPPING(text), punchCard);
+        //addTxtFileWord(WORD_FILE_PATH, text);
     }
     return;
 }
@@ -505,25 +546,22 @@ Setting_Point:
     case PunchCard_P1:
         printColor("1번 (모스부호를 익히자!) 펀치카드 설정중...\n", COLOR_CYAN);
         setPunchCard(&listenProgramCard);
-        Sleep(500);
         break;
     case PunchCard_P2:
         printColor("2번 (모스부호->텍스트 연습!) 펀치카드 설정중...\n", COLOR_CYAN);
         setPunchCard(&m2aProgramCard);
-        Sleep(500);
         break;
     case PunchCard_P3:
         printColor("3번 (텍스트->모스부호 연습!) 펀치카드 설정중...\n", COLOR_CYAN);
         setPunchCard(&a2mProgramCard);
-        Sleep(500);
         break;
     case TimeSet:
         setPitch();
-        Sleep(500);
         break;
     case Setting_Out:
         return;
     }
+    Sleep(500);
 
     inputCode = 0;
     goto Setting_Point;
