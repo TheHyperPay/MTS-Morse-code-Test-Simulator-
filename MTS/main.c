@@ -12,7 +12,7 @@
 
 #pragma comment(lib, "winmm.lib")
 
-#define SAFE_DELETE(ptr)                do { free(ptr); (ptr) = NULL; } while(0)
+#define SAFE_DELETE(ptr)                free(ptr); (ptr) = NULL;
 #define CAPPING(char_array)             strupr(char_array)
 #define DELETE_SLASH_N(text_array)      text_array[strcspn(text_array, "\n")] = 0
 
@@ -33,9 +33,9 @@ typedef struct {
     short outputToConsoleAboutMorseCodeSound;
     short printToConsoleAboutMorseCodeBar;
 }punchCard_t;
-punchCard_t listenProgramCard = { DENY, DENY };
+punchCard_t listenProgramCard = { DENY, DENY};
 punchCard_t m2aProgramCard = { DENY, DENY };
-punchCard_t a2mProgramCard = { DENY, DENY };
+punchCard_t a2mProgramCard = { DENY, DENY};
 
 #define INSERT_TEXT(card_p, text, str)                  {if(CHECK_CARD_HOLE_MCB(card_p)) {printf("%s", str);} strcat(text, str);}
 #define PRINT_TEXT(card_p, fstChar, secStr)             {printf("%c", fstChar); if(CHECK_CARD_HOLE_MCB(card_p)) {printf(": %s", secStr);}}
@@ -69,6 +69,77 @@ typedef struct {
 #define W_TEXT(wordText)                  (wordText).text
 
 fileLine_t wordFile_line = 1;
+
+typedef struct{
+    char* time;
+    char* programName;
+    char* action;
+}logFormat_t;
+
+#define LOG_MAX                           220
+#define LOG(programName, action)          {logFormat_t* log = inputData(getNowFormatTime(), (programName), (action)); insertLogData(log); }
+
+logFormat_t* inputData(const char* time, const char* programName, const char* action)
+{
+    logFormat_t* value = (logFormat_t*)malloc(sizeof(logFormat_t));
+
+    // 메모리 할당 후 문자열 복사
+    value->time = (char*)malloc(strlen(time) + 1);
+    if (value->time != NULL) {
+        strcpy(value->time, time);
+    }
+
+    // 메모리 할당 후 문자열 복사
+    value->programName = (char*)malloc(strlen(programName) + 1);
+    if (value->programName != NULL) {
+        strcpy(value->programName, programName);
+    }
+
+    // 메모리 할당 후 문자열 복사
+    value->action = (char*)malloc(strlen(action) + 1);
+    if (value->action != NULL) {
+        strcpy(value->action, action);
+    }
+
+    return value;
+}
+
+typedef struct logNode_t{
+    logFormat_t* data;
+    struct logNode_t* link;
+}logNode_t;
+
+logNode_t* head = NULL;
+
+void insertLogData(const logFormat_t* logData)
+{
+    logNode_t* log = (logNode_t*)malloc(sizeof(logNode_t));
+    log->link = NULL;
+
+    log->data = logData;
+    
+    logNode_t* temp = head;
+    while (temp->link != NULL)
+        temp = temp->link;
+
+    temp->link = log;
+}
+
+logFormat_t* deleteLogData()
+{
+    logFormat_t* temp = NULL;
+    
+    if (head->link == NULL)
+        return temp;
+
+    temp = head->link->data;
+    logNode_t* nextLink = head->link;
+    head->link = nextLink->link;
+
+    SAFE_DELETE(nextLink);
+
+    return temp;
+}
 
 typedef enum
 {
@@ -131,23 +202,39 @@ const char convertM2A(const char* morseCode)
 }
 
 #define TIME_TERM(dword)                (GetTickCount() - (dword))
-#define TIME_NOW                        (unsigned int)time(NULL)
+#define TIME_NOW(type)                  (type)time(NULL)
 #define SHUFFLE_BIT_1                   0b10101010101010101010101010101010
 #define SHUFFLE_BIT_2                   0b01010000100001000010000100001010
 int randomDrop(unsigned short maxVal)
 {
     srand(
-        (SHUFFLE_BIT_1 >> 1 ^ TIME_NOW << 8) >> 10 ^
-        (SHUFFLE_BIT_2 << 1 & TIME_NOW >> 3) >> 10 ^
-        (SHUFFLE_BIT_1 << 0 ^ TIME_NOW << 15) >> 3 ^
-        (SHUFFLE_BIT_2 >> 1 & TIME_NOW << 3) << 10 ^
-        (SHUFFLE_BIT_1 >> 1 ^ TIME_NOW >> 11) >> 1);
+        (SHUFFLE_BIT_1 >> 1 ^ TIME_NOW(unsigned int) << 8) >> 10 ^
+        (SHUFFLE_BIT_2 << 1 & TIME_NOW(unsigned int) >> 3) >> 10 ^
+        (SHUFFLE_BIT_1 << 0 ^ TIME_NOW(unsigned int) << 15) >> 3 ^
+        (SHUFFLE_BIT_2 >> 1 & TIME_NOW(unsigned int) << 3) << 10 ^
+        (SHUFFLE_BIT_1 >> 1 ^ TIME_NOW(unsigned int) >> 11) >> 1);
     return (rand() % maxVal + 1);
+}
+
+char* getNowFormatTime() {
+    char formattedTime[100];
+    struct tm* timeinfo;
+    time_t now = TIME_NOW(time_t);
+    timeinfo = localtime(&now);
+    strftime(formattedTime, sizeof(formattedTime), "%Y-%m-%d %H:%M:%S", timeinfo);
+
+    char* result = (char*)malloc(strlen(formattedTime) + 1);
+    if (result != NULL) {
+        strcpy(result, formattedTime);
+    }
+
+    return result;
 }
 
 
 #define WORD_FILE_PATH                  "EnglishWords.data"
 #define WORD_FILE_LINE                  wordFile_line
+#define LOG_PATH                        "program.log"
 
 wordText_t getFileTexts(const char* fileName, fileLine_t fileLine)
 {
@@ -195,46 +282,51 @@ fileLine_t getFileLine(const char* fileName)
     return lines;
 }
 
-int isAlreadyExistWord(const char* fileName, const char* message)
+void writeFileTexts(const char* fileName, const char* texts)
 {
-    FILE* fp = fopen(fileName, "r");;
-    char buffer[20];
+    FILE* fp = fopen(fileName, "a");
 
-    if (fp == NULL)
-        return 0;
-
-    while (fgets(buffer, sizeof(buffer), fp)) {
-
-        if (strcmp(message, buffer) == 0) {
-            fclose(fp);
-            return 1;
-        }
-
+    if (fp == NULL) {
+        fprintf(stderr, "FILE ERROR.\n");
+        return 1;
     }
-    fclose(fp);
 
-    return 0;
+    fprintf(fp,"%s", texts);
+
+    fclose(fp);
 }
 
-void addTxtFileWord(const char* fileName, const char* message)
+void startLog()
 {
+    head = (logNode_t*)malloc(sizeof(logNode_t));
+    //init linked list
+    head->link = NULL;
+}
+void endLog()
+{
+    while (head->link != NULL)
+    {
+        logFormat_t* logData = deleteLogData();
+        char* text = (char*)malloc(strlen(logData->time) + strlen(logData->programName) + strlen(logData->action) + 4);
+        if (text != NULL)
+        {
+            strcpy(text, logData->time);
+            strcat(text, "\t");
+            strcat(text, logData->programName);
+            strcat(text, "\t");
+            strcat(text, logData->action);
+            strcat(text, "\n");
+        }
 
-    if (isAlreadyExistWord(fileName, message)) {
-        printf("이미 텍스트 파일에 있는 단어입니다.\n");
-        return;
+        writeFileTexts(LOG_PATH, text);
+
+        SAFE_DELETE(logData->time);
+        SAFE_DELETE(logData->programName);
+        SAFE_DELETE(logData->action);
+        SAFE_DELETE(text);
     }
 
-    FILE* fp = fopen(fileName, "a");
-    if (fp == NULL)
-        return 0;
-    fprintf(fp, "\n%s ->", message);
-
-    for (int i = 0; *(message + i) != '\0'; i++) {
-        const char* morseMessage = convertA2M(*(message + i));
-        fprintf(fp, " %s  ", morseMessage);
-    }
-
-    fclose(fp);
+    SAFE_DELETE(head);
 }
 
 float timePitch                         = 1;
@@ -290,14 +382,20 @@ void playBeepSoundInMorseCode(const char* morseMessage, char isPlaySound)
 //===================================  1번 프로그램  ===================================
 //=====================================================================================
 void morseSound(const char* message, punchCard_t* punchCard) {
+    char logmsg[LOG_MAX] = "system printing this morse code value:\t ";
+
     for (int i = 0; *(message + i) != '\0'; i++) {
         const char* morseMessage = convertA2M(*(message + i));
+        strcat(logmsg, morseMessage);
+        strcat(logmsg, " ");
 
         PRINT_TEXT(punchCard, *(message + i), morseMessage)
             printf("\n");
 
         playBeepSoundInMorseCode(morseMessage, CHECK_CARD_HOLE_MCS(punchCard));
     }
+
+    LOG("PROGRAM_1", logmsg);
 }
 
 void runProgram1(punchCard_t* punchCard)
@@ -310,10 +408,12 @@ void runProgram1(punchCard_t* punchCard)
     {
         printf(">");
         gets(text);
+        char logmsg[LOG_MAX] = "player write:\t ";
+        strcat(logmsg, CAPPING(text));
+        LOG("PROGRAM_1", logmsg);
         if ((strcmp(CAPPING(text), "EXIT") == 0))
             return;
         morseSound(CAPPING(text), punchCard);
-        //addTxtFileWord(WORD_FILE_PATH, text);
     }
     return;
 }
@@ -328,14 +428,21 @@ int checkAnsM2A(const char* ans, const char* right)
 
 void onlySound_text(const char* message, punchCard_t* punchCard)
 {
+    char logmsg[LOG_MAX] = "morse code question:\t ";
+
     for (int i = 0; *(message + i) != '\0'; i++) {
         const char* morseMessage = convertA2M(*(message + i));
+        strcat(logmsg, morseMessage);
+        strcat(logmsg, " ");
 
         if(CHECK_CARD_HOLE_MCB(punchCard))
             printColor(morseMessage, COLOR_BLUE); printf("  ");
 
         playBeepSoundInMorseCode(morseMessage, CHECK_CARD_HOLE_MCS(punchCard));
     }
+
+    LOG("PROGRAM_2", logmsg);
+
     printf("\n");
 }
 
@@ -346,22 +453,40 @@ void runProgram2(punchCard_t* punchCard)
     printf("만약 프로그램 "); printColor("선택창으로 돌아가고 싶다면 exit를 입력", COLOR_MAGENTA); printf("하세요\n\n");
     Sleep(1000);
 
-    char ans[7 * 20] = "actoz";
+    char ans[7 * 20] = "sample";
     while (1)
     {
         wordText_t* pickedupWord = { W_TEXT(getFileTexts(WORD_FILE_PATH, WORD_FILE_LINE)) };
         printf("Q: ");
         onlySound_text(pickedupWord, punchCard);
-         
+
+        char logmsg_a[LOG_MAX] = "text question:\t ";
+        strcat(logmsg_a, W_TEXT(*pickedupWord));
+        LOG("PROGRAM_2", logmsg_a);
+
         printf("> ");
         scanf("%s", ans);
+
         if ((strcmp(CAPPING(ans), "EXIT") == 0))
+        {
+            char logmsg_b[LOG_MAX] = "player write answer:\t ";
+            strcat(logmsg_b, CAPPING(ans));
+            LOG("PROGRAM_2", logmsg_b);
             return;
+        }
         if (checkAnsM2A(CAPPING(ans), W_TEXT(*pickedupWord)) == 0) {
             printColor("정답!\n", COLOR_GREEN);
+
+            char logmsg_b[LOG_MAX] = "player write correct answer:\t ";
+            strcat(logmsg_b, CAPPING(ans));
+            LOG("PROGRAM_2", logmsg_b);
         }
         else {
             printColor("오답...\n", COLOR_RED);
+
+            char logmsg_b[LOG_MAX] = "player write incorrect answer:\t ";
+            strcat(logmsg_b, CAPPING(ans));
+            LOG("PROGRAM_2", logmsg_b);
         }
         Sleep(1000);
     }
@@ -373,13 +498,21 @@ void runProgram2(punchCard_t* punchCard)
 //=====================================================================================
 int checkAnsA2M(char* word, char* morse)
 {
+    char logmsg[LOG_MAX] = "morse code correct answer:\t ";
+
+    char* morseMessage;
     char answer[7 * 20] = "";
     for (int i = 0; *(word + i) != '\0'; i++) {
         const char* morseMessage = convertA2M(*(word + i));
+        strcat(logmsg, morseMessage);
+        strcat(logmsg, " ");
 
         strcat(answer, morseMessage);
         strcat(answer, " ");
     }
+
+    LOG("PROGRAM_3", logmsg);
+
     printf("R: "); printColor(answer, COLOR_YELLOW); printf("\n");
     return strcmp(answer, morse);
 }
@@ -408,6 +541,9 @@ int pressChecker(
     }
     else if (GetAsyncKeyState(KEY_ESC) & 0x8000)
     {
+        char logmsg[LOG_MAX] = "player want to EXIT!";
+        strcat(logmsg, morse);
+        LOG("PROGRAM_3", logmsg);
         return 0;
     }
     else if (GetAsyncKeyState(KEY_N) & 0x8000)
@@ -418,13 +554,27 @@ int pressChecker(
 
         printf("\n");
         if (checkAnsA2M(word, morse) == 0)
+        {
+            char logmsg_a[LOG_MAX] = "player write correct answer:\t ";
+            strcat(logmsg_a, morse);
+            LOG("PROGRAM_3", logmsg_a);
+
             printColor("정답!\n", COLOR_GREEN);
+        }
         else
+        {
+            char logmsg_a[LOG_MAX] = "player write incorrect answer:\t ";
+            strcat(logmsg_a, morse);
+            LOG("PROGRAM_3", logmsg_a);
             printColor("오답...\n", COLOR_RED);
+        }
         morse[0] = '\0';
         Sleep(1000);
 
         P3_QUESTION(*word)
+        char logmsg[LOG_MAX] = "system make a question:\t ";
+        strcat(logmsg, W_TEXT(*word));
+        LOG("PROGRAM_3", logmsg);
     }
     else
     {
@@ -473,7 +623,13 @@ void runProgram3(punchCard_t* punchCard)
 
     char morse[7 * 20] = "";
     wordText_t* pickedupWord = { W_TEXT(getFileTexts(WORD_FILE_PATH, WORD_FILE_LINE)) };
+
     P3_QUESTION(*pickedupWord)
+
+    char logmsg[LOG_MAX] = "system make a question: ";
+    strcat(logmsg, W_TEXT(*pickedupWord));
+    LOG("PROGRAM_3", logmsg);
+
         while (pressChecker(
             &spacePressed, &termMode,
             &spaceDownTime, &termWaitTime,
@@ -503,7 +659,9 @@ void setPunchCard(punchCard_t* card)
 {
     int mcs = 0, mcb = 0;
     printf("소리 출력 여부(ALLOW: 1, DENY: 0) >"); scanf("%d", &mcs);
+    LOG("SYSTEM", "set punch card about sound output");
     printf("모스코드 출력 여부(ALLOW: 1, DENY: 0) >"); scanf("%d", &mcb);
+    LOG("SYSTEM", "set punch card about morse code output");
     card->outputToConsoleAboutMorseCodeSound = PUNCHNUM(mcs);
     card->printToConsoleAboutMorseCodeBar = PUNCHNUM(mcb);
     printf("설정 완료!");
@@ -512,6 +670,7 @@ void setPitch()
 {
     printf("배속 조정 (0.5~1.5) >");
     scanf("%f", &timePitch);
+    LOG("SYSTEM", "set program pitch");
     if (timePitch < 0.5)
         timePitch = 0.5;
     else if (timePitch > 1.5)
@@ -544,18 +703,22 @@ Setting_Point:
     {
         int mcs = 0, mcb = 0;
     case PunchCard_P1:
+        LOG("SYSTEM", "setting about listen morse code punchcard");
         printColor("1번 (모스부호를 익히자!) 펀치카드 설정중...\n", COLOR_CYAN);
         setPunchCard(&listenProgramCard);
         break;
     case PunchCard_P2:
+        LOG("SYSTEM", "setting about morse code to alphabet program punchcard");
         printColor("2번 (모스부호->텍스트 연습!) 펀치카드 설정중...\n", COLOR_CYAN);
         setPunchCard(&m2aProgramCard);
         break;
     case PunchCard_P3:
+        LOG("SYSTEM", "setting about alphabet to morse code program punchcard");
         printColor("3번 (텍스트->모스부호 연습!) 펀치카드 설정중...\n", COLOR_CYAN);
         setPunchCard(&a2mProgramCard);
         break;
     case TimeSet:
+        LOG("SYSTEM", "setting about program pitch");
         setPitch();
         break;
     case Setting_Out:
@@ -576,8 +739,13 @@ int main()
     int programCode = 0;
     init();
 
+    startLog();
+    LOG("SYSTEM", "program is now started");
+    endLog();
+
 ProgramStart_Point:
     system("cls");
+    startLog();
     do
     {
         printf("%d. 모스부호를 익히자!\n", Listen);
@@ -597,23 +765,34 @@ ProgramStart_Point:
     switch (programCode)
     {
     case Listen:
+        LOG("SYSTEM", "play listen morse code program");
         runProgram1(&listenProgramCard);
+        LOG("SYSTEM", "exit listen morse code program");
         break;
     case M2A:
+        LOG("SYSTEM", "play converting about morse code to alphabet program");
         runProgram2(&m2aProgramCard);
+        LOG("SYSTEM", "exit converting about morse code to alphabet program");
         break;
     case A2M:
+        LOG("SYSTEM", "play converting about alphabet to morse code program");
         runProgram3(&a2mProgramCard);
+        LOG("SYSTEM", "exit converting about alphabet to morse code program");
         break;
     case Setting:
+        LOG("SYSTEM", "enter setting");
         setting();
+        LOG("SYSTEM", "exit setting");
         break;
     case Fin:
+        LOG("SYSTEM", "program is now closed");
+        endLog();
         exit(0);
         break;
     }
 
     programCode = 0;
+    endLog();
     goto ProgramStart_Point;
 }
 
